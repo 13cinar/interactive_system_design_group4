@@ -38,7 +38,7 @@ arucoDetector = cv2.aruco.ArucoDetector(arucoDict,arucoParams)
 
 # Start streaming
 pipeline.start(config)
-
+output_dict = {}
 try:
     while True:
 
@@ -55,9 +55,33 @@ try:
         
         ################################
         # LAB 0 & 1 GETTING MARKERS
-        corners, ids, reject= arucoDetector.detectMarkers(color_image)
+        
+        corners, ids, reject = arucoDetector.detectMarkers(color_image)
+        #print("ids",ids)
+        ids_list=np.array(ids)
+        #print("rejects",reject)
         color_image = cv2.aruco.drawDetectedMarkers(color_image,corners,ids)
-         
+
+        if len(corners)> 0:
+            #print("corners",corners)
+            origin_coordinates_list = corners[0][0]
+            ids_list=ids[0]
+            #print("orig coords", origin_coordinates_list)
+            
+            for idx, id in enumerate(ids_list):
+                #if id in reject:
+                #    continue
+                
+                curr_coord = origin_coordinates_list[idx]
+                #calculate 3d
+                curr_depth = depth_frame.get_distance(curr_coord[0],curr_coord[1])
+                curr_depth_intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+                curr_3d_coord=rs.rs2_deproject_pixel_to_point(curr_depth_intrinsics,curr_coord,curr_depth)
+                # add obj
+                newData = {int(id): curr_3d_coord}
+                output_dict.update(newData)
+
+        print(output_dict)
 
         # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
