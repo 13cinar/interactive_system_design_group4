@@ -38,7 +38,6 @@ arucoDetector = cv2.aruco.ArucoDetector(arucoDict,arucoParams)
 
 # Start streaming
 pipeline.start(config)
-output_dict = {}
 try:
     while True:
 
@@ -55,30 +54,42 @@ try:
         
         ################################
         # LAB 0 & 1 GETTING MARKERS
-        
-        corners, ids, reject = arucoDetector.detectMarkers(color_image)
-        #print("ids",ids)
+        objects, ids, reject = arucoDetector.detectMarkers(color_image)
         ids_list=np.array(ids)
-        #print("rejects",reject)
-        color_image = cv2.aruco.drawDetectedMarkers(color_image,corners,ids)
+        objects=np.array(objects)
 
-        if len(corners)> 0:
-            #print("corners",corners)
-            origin_coordinates_list = corners[0][0]
-            ids_list=ids[0]
-            #print("orig coords", origin_coordinates_list)
+        #print("rejects",reject)
+        color_image = cv2.aruco.drawDetectedMarkers(color_image,objects,ids)
+
+        output_dict = {}
+        if len(objects)> 0:
+            #print("ids",ids_list)
+            #print("objects",objects)
             
             for idx, id in enumerate(ids_list):
+                id=id[0]
+                #print("==id: ",id)
                 #if id in reject:
                 #    continue
                 
-                curr_coord = origin_coordinates_list[idx]
+                # For some reason each is stored in a triple array
+                # e.g.
+                #[[[305. 196.]
+                # [460. 185.]
+                # [488. 344.]
+                # [312. 355.]]]
+                corners = objects[idx][0]
+                # 1 corner
+                curr_corner = corners[0]
+                #print("==Corner", curr_corner)
+                x = curr_corner[0]
+                y = curr_corner[1]
                 #calculate 3d
-                curr_depth = depth_frame.get_distance(curr_coord[0],curr_coord[1])
+                curr_depth = depth_frame.get_distance(x,y)
                 curr_depth_intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
-                curr_3d_coord=rs.rs2_deproject_pixel_to_point(curr_depth_intrinsics,curr_coord,curr_depth)
+                curr_3d_coord=rs.rs2_deproject_pixel_to_point(curr_depth_intrinsics,curr_corner,curr_depth)
                 # add obj
-                newData = {int(id): curr_3d_coord}
+                newData = {id.item(): curr_3d_coord}
                 output_dict.update(newData)
 
         print(output_dict)
