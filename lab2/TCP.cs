@@ -26,9 +26,10 @@ public class TCP : MonoBehaviour
     [Serializable]
     public class Message
     {
-        public string some_string;
-        public int some_int;
-        public float some_float;
+        public String resp;
+        public int id;
+
+        public float x, y, z;
     }
 
     private float timer = 0;
@@ -45,23 +46,28 @@ public class TCP : MonoBehaviour
     private void Update()
     {
         // Send message to client every 2 second
-        if(Time.time > timer)
+        if (Time.time > timer)
         {
             Message msg = new Message();
-            msg.some_string = "From Server";
-            msg.some_int = 1;
-            msg.some_float = .1f;
+            msg.resp = "From Server";
+            msg.id = 0;
+            msg.x = 0;
+            msg.y = 0;
+            msg.z = 0;
+            //     msg.position_y = 1;
+            //  msg.position_z = 1;
+
             SendMessageToClient(msg);
             timer = Time.time + 2f;
         }
         // Process message que
-        lock(Lock)
+        lock (Lock)
         {
             foreach (Message msg in MessageQue)
             {
                 // Unity only allow main thread to modify GameObjects.
                 // Spawn, Move, Rotate GameObjects here. 
-                Debug.Log("Received Str: " + msg.some_string + " Int: " + msg.some_int + " Float: " + msg.some_float);
+                 Debug.Log("Received str: " + msg.resp + " ID: " + msg.id + " coords: " + msg.x +" X"+ msg.y +" Y"+ msg.z +" Z");
             }
             MessageQue.Clear();
         }
@@ -94,7 +100,7 @@ public class TCP : MonoBehaviour
                     data = Encoding.UTF8.GetString(buffer, 0, i);
                     Message message = Decode(data);
                     // Add received message to que
-                    lock(Lock)
+                    lock (Lock)
                     {
                         MessageQue.Add(message);
                     }
@@ -138,5 +144,18 @@ public class TCP : MonoBehaviour
     {
         Message msg = JsonUtility.FromJson<Message>(json_string);
         return msg;
+    }
+
+    public void SendAnchorCreated(int id, Vector3 pos)
+    {
+        Message msg = new Message
+        {
+            resp = "anchor_created",
+            id = id,
+            x = pos.x,
+            y = pos.y,
+            z = pos.z
+        };
+        SendMessageToClient(msg);
     }
 }

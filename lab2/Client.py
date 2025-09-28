@@ -30,9 +30,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 			#Implement the client receives dictionary
 			
 			msg = receive(sock)
-			msg['some_string'] = "From Client"
-			msg['some_int'] += 1
-			msg['some_float'] -= .1
+			msg['resp'] = "From Client"
+			msg['id'] += 1
 			send(sock, msg)
 		except KeyboardInterrupt:
 			exit()
