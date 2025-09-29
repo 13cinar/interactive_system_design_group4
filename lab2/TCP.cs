@@ -22,6 +22,7 @@ public class TCP : MonoBehaviour
     NetworkStream stream = null;
     Thread thread;
 
+
     // Define your own message
     [Serializable]
     public class Message
@@ -36,6 +37,9 @@ public class TCP : MonoBehaviour
     private static object Lock = new object();  // lock to prevent conflict in main thread and server thread
     private List<Message> MessageQue = new List<Message>();
 
+    public Transform realSenseParent;
+    public GameObject rsMarkerPrefab;
+    private Dictionary<int, GameObject> arucoObjects = new Dictionary<int, GameObject>();
 
     private void Start()
     {
@@ -67,7 +71,24 @@ public class TCP : MonoBehaviour
             {
                 // Unity only allow main thread to modify GameObjects.
                 // Spawn, Move, Rotate GameObjects here. 
-                 Debug.Log("Received str: " + msg.resp + " ID: " + msg.id + " coords: " + msg.x +" X"+ msg.y +" Y"+ msg.z +" Z");
+                Debug.Log("Received str: " + msg.resp + " ID: " + msg.id + " coords: " + msg.x + " X" + msg.y + " Y" + msg.z + " Z");
+                if (msg.resp == "aruco_pose")
+                {
+                    int id = msg.id;
+                    Vector3 p = new Vector3(msg.x, msg.y, msg.z);
+
+                    if (!arucoObjects.TryGetValue(id, out var go) || go == null)
+                    {
+                        go = CreateMarker(p);
+                        go.name = $"ArUco_{id}";
+                        arucoObjects[id] = go;
+                    }
+                    else
+                    {
+                        go.transform.position = p;
+                    }
+                }
+                                
             }
             MessageQue.Clear();
         }
@@ -146,6 +167,22 @@ public class TCP : MonoBehaviour
         return msg;
     }
 
+    private GameObject CreateMarker(Vector3 pos)
+    {
+        GameObject go;
+        if (rsMarkerPrefab != null)
+        {
+            go = Instantiate(rsMarkerPrefab, pos, Quaternion.identity, realSenseParent);
+        }
+        else
+        {
+            go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.transform.SetParent(realSenseParent, true);
+            go.transform.position = pos;
+            go.transform.localScale = Vector3.one * 0.08f; // ~8 cm        
+        }
+        return go;
+    }
     public void SendAnchorCreated(int id, Vector3 pos)
     {
         Message msg = new Message
