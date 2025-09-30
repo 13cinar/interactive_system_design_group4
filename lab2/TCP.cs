@@ -12,6 +12,8 @@ using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
 using System.Collections.Generic;
+using Unity.VisualScripting;
+using TMPro;
 
 public class TCP : MonoBehaviour
 {
@@ -32,12 +34,16 @@ public class TCP : MonoBehaviour
 
         public float x, y, z;
     }
+    public class MessageContainer
+    {
+        public Message msg;
+    }
 
     private float timer = 0;
     private static object Lock = new object();  // lock to prevent conflict in main thread and server thread
     private List<Message> MessageQue = new List<Message>();
 
-    public Transform realSenseParent;
+    public GameObject realSenseParentObject;
     public GameObject rsMarkerPrefab;
     private Dictionary<int, GameObject> arucoObjects = new Dictionary<int, GameObject>();
 
@@ -71,24 +77,26 @@ public class TCP : MonoBehaviour
             {
                 // Unity only allow main thread to modify GameObjects.
                 // Spawn, Move, Rotate GameObjects here. 
-                Debug.Log("Received str: " + msg.resp + " ID: " + msg.id + " coords: " + msg.x + " X" + msg.y + " Y" + msg.z + " Z");
+                Debug.LogWarning("Received str: " + msg.resp + " ID: " + msg.id + " coords: " + msg.x + "X, " + msg.y + "Y, " + msg.z + "Z, ");
                 if (msg.resp == "aruco_pose")
                 {
                     int id = msg.id;
                     Vector3 p = new Vector3(msg.x, msg.y, msg.z);
-
+                    
+                    //The marker needs to be created & modified here as indicated
                     if (!arucoObjects.TryGetValue(id, out var go) || go == null)
                     {
-                        go = CreateMarker(p);
+                        go = CreateMarker(p, id);
                         go.name = $"ArUco_{id}";
                         arucoObjects[id] = go;
                     }
                     else
                     {
+                        // IDEA 1 IMPROVEMENT, DELTA FOR changes
                         go.transform.position = p;
                     }
                 }
-                                
+
             }
             MessageQue.Clear();
         }
@@ -116,14 +124,25 @@ public class TCP : MonoBehaviour
 
                 // Receive message from client    
                 int i;
+                string bufferedData = "";
                 while ((i = stream.Read(buffer, 0, buffer.Length)) != 0)
                 {
                     data = Encoding.UTF8.GetString(buffer, 0, i);
-                    Message message = Decode(data);
-                    // Add received message to que
-                    lock (Lock)
+                    //Debug.LogWarning("data is:" + data);
+
+                    //partially read and store new data
+                    bufferedData += data;
+                    // 1 or more complete messages read, splitting
+                    while (bufferedData.Contains("\n"))
                     {
-                        MessageQue.Add(message);
+                        // 1st find first ocurrence of our msg separator, 
+                        int tempidx = bufferedData.IndexOf("\n");
+                        string tempToSend = bufferedData.Substring(0, tempidx);
+
+                        // Decode and add message to our valid list of messages
+                        handleSingleMessage(tempToSend);
+                        // cut string and continue
+                        bufferedData = bufferedData.Substring(tempidx +1);
                     }
                 }
                 client.Close();
@@ -146,7 +165,15 @@ public class TCP : MonoBehaviour
         server.Stop();
         thread.Abort();
     }
-
+    private void handleSingleMessage(string input) {
+        Message message = Decode(input);
+        if (message != null)
+            // Add received message to que
+            lock (Lock)
+            {
+                MessageQue.Add(message);
+            }
+    }
     public void SendMessageToClient(Message message)
     {
         byte[] msg = Encoding.UTF8.GetBytes(Encode(message));
@@ -163,26 +190,34 @@ public class TCP : MonoBehaviour
     // Decode messaage from Json String to struct
     public Message Decode(string json_string)
     {
-        Message msg = JsonUtility.FromJson<Message>(json_string);
-        return msg;
+        Message msg;
+        try
+        {
+            msg = JsonUtility.FromJson<MessageContainer>(json_string).msg;
+            return msg;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Err: " + ex.Message);
+            Debug.LogError("Error formatting json: " + json_string);
+            return null;
+        }
     }
 
-    private GameObject CreateMarker(Vector3 pos)
+    private GameObject CreateMarker(Vector3 pos, int id)
     {
         GameObject go;
-        if (rsMarkerPrefab != null)
-        {
-            go = Instantiate(rsMarkerPrefab, pos, Quaternion.identity, realSenseParent);
-        }
-        else
-        {
-            go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.transform.SetParent(realSenseParent, true);
-            go.transform.position = pos;
-            go.transform.localScale = Vector3.one * 0.08f; // ~8 cm        
-        }
+        go = Instantiate(rsMarkerPrefab, pos, Quaternion.identity, realSenseParentObject.transform);
+        go.name = $"ArUco_{id}";
         return go;
     }
+
+    private bool epsilonCheck(float a, float b)
+    {
+        float E = 0;
+        return true;
+    }
+
     public void SendAnchorCreated(int id, Vector3 pos)
     {
         Message msg = new Message

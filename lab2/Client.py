@@ -23,12 +23,13 @@ def receive(sock):
     try:
         msg = json.loads(data)
         print("Received: ", msg)
+        return msg
     except Exception as e:
         print("Error on json.loads: ", e)
-    return msg
+        raise e
 
 def send(sock, msg):
-	data = json.dumps(msg)
+	data = json.dumps({"msg": msg}) + '\n'
 	sock.sendall(data.encode('utf-8'))
 	print("Sent: ", msg)
  
@@ -123,6 +124,8 @@ def _self_test_calibration():
     # ---------- Optional: Rigid + scale sanity (not required) ----------
     # You could also test a small scale or rotation if you want.
 
+###
+# Connection Loop
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 	sock.connect((HOST, PORT))
 	sock.settimeout(0.05)   # avoid blocking forever on recv; tweak if needed

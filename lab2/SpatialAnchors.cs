@@ -40,6 +40,8 @@ public class SpatialAnchors : MonoBehaviour
         idText = canvas.gameObject.transform.GetChild(0).GetComponent<TextMeshProUGUI>();
         idText.text = "ID: " + count.ToString();
 
+        anchor.name = $"TempAnchor_{count}";
+
         // Show anchor position
         positionText = canvas.gameObject.transform.GetChild(1).GetComponent<TextMeshProUGUI>();
         positionText.text = anchor.transform.GetChild(0).GetChild(0).position.ToString();
