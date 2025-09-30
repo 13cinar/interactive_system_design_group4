@@ -54,7 +54,5 @@ public class SpatialAnchors : MonoBehaviour
 
         // Increase Id by 1
         count += 1;
-        
-
     }
 }

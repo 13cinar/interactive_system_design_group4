@@ -43,9 +43,11 @@ public class TCP : MonoBehaviour
     private static object Lock = new object();  // lock to prevent conflict in main thread and server thread
     private List<Message> MessageQue = new List<Message>();
 
+    // Creating ArUco Markers
     public GameObject realSenseParentObject;
     public GameObject rsMarkerPrefab;
     private Dictionary<int, GameObject> arucoObjects = new Dictionary<int, GameObject>();
+    private int createdMarkers = 0;
 
     private void Start()
     {
@@ -70,6 +72,19 @@ public class TCP : MonoBehaviour
             SendMessageToClient(msg);
             timer = Time.time + 2f;
         }
+        // Dissapear original anchors
+        if (createdMarkers == 3)
+        {
+            for (int i = 0; i < createdMarkers; i++)
+            {
+                var el = GameObject.Find($"TempAnchor_{i}");
+                if (el != null)
+                {
+                    el.SetActive(false);
+                }
+            }
+            createdMarkers = 0;
+        }
         // Process message que
         lock (Lock)
         {
@@ -82,7 +97,7 @@ public class TCP : MonoBehaviour
                 {
                     int id = msg.id;
                     Vector3 p = new Vector3(msg.x, msg.y, msg.z);
-                    
+
                     //The marker needs to be created & modified here as indicated
                     if (!arucoObjects.TryGetValue(id, out var go) || go == null)
                     {
@@ -92,8 +107,12 @@ public class TCP : MonoBehaviour
                     }
                     else
                     {
-                        // IDEA 1 IMPROVEMENT, DELTA FOR changes
-                        go.transform.position = p;
+                        //Improvement: Check if values exceed our sensibility threshold (Epsilon Comparison/Tolerance check)
+                        bool a = epsilonCheck(go.transform.position.x, p.x);
+                        bool b = epsilonCheck(go.transform.position.y, p.y);
+                        bool c = epsilonCheck(go.transform.position.z, p.z);
+                        if (a || b || c)
+                            go.transform.position = p;
                     }
                 }
 
@@ -178,7 +197,7 @@ public class TCP : MonoBehaviour
     {
         byte[] msg = Encoding.UTF8.GetBytes(Encode(message));
         stream.Write(msg, 0, msg.Length);
-        Debug.Log("Sent: " + message);
+        //Debug.Log("Sent: " + message);
     }
 
     // Encode message from struct to Json String
@@ -209,13 +228,16 @@ public class TCP : MonoBehaviour
         GameObject go;
         go = Instantiate(rsMarkerPrefab, pos, Quaternion.identity, realSenseParentObject.transform);
         go.name = $"ArUco_{id}";
+        createdMarkers += 1;
         return go;
     }
 
     private bool epsilonCheck(float a, float b)
     {
-        float E = 0;
-        return true;
+        float E = 0.01F;
+        if (Mathf.Abs(a - b) > E)
+            return true;
+        else return false;
     }
 
     public void SendAnchorCreated(int id, Vector3 pos)
