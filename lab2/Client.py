@@ -6,7 +6,9 @@ import socket
 import json
 import numpy as np
 import time, os
-HOST = "172.20.10.3"  # The server's hostname or IP address
+#HOST = "192.168.0.126"  # The server's(Oculus)  hostname or IP address
+#HOST = "172.20.10.3"  # Eren's hotspot
+HOST = "10.90.175.12"  # Salv's hotspot
 PORT = 54750;            # The port used by the server
 unity_anchors = {}  # {anchor_id: np.array([x,y,z])}
 # {anchor_id: aruco_id}  # temporary manual mapping for calibration
@@ -18,8 +20,11 @@ pair_map = {
 def receive(sock):
     data = sock.recv(1024)
     data = data.decode('utf-8')
-    msg = json.loads(data)
-    print("Received: ", msg)
+    try:
+        msg = json.loads(data)
+        print("Received: ", msg)
+    except Exception as e:
+        print("Error on json.loads: ", e)
     return msg
 
 def send(sock, msg):
@@ -135,17 +140,20 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 				unity_anchors[aid] = np.array([msg["x"], msg["y"], msg["z"]], dtype=float)
 				print("[Client] Stored Unity anchor:", aid, unity_anchors[aid])
 			
-	# Read latest RealSense detections
+		# Read latest RealSense detections
 		except KeyboardInterrupt:
 			exit()
+		except TimeoutError as e:
+			print(".", flush=True, end=".")
 		except Exception as e:
 			print("[Loop] Exception:", repr(e), flush=True)
    
-	# 2) Read latest RealSense detections (from maine.py -> output.json)
+		# 2) Read latest RealSense detections (from maine.py -> output.json)
 		rs_now = read_rs_dict("output.json")  # ensure path points to the same folder you run from
-		print("[Pairs] have:", [a for a, r in pair_map.items()
-                                if (a in unity_anchors and r in rs_now)])
-        # 3) Compute T once (or whenever you want to refresh) when ≥3 pairs exist
+		pairs = [a for a, r in pair_map.items() if (a in unity_anchors and r in rs_now)]
+		if len(pairs) > 0:
+			print("[Pairs] have: ", pairs)
+		# 3) Compute T once (or whenever you want to refresh) when ≥3 pairs exist
 		if T is None:
 			T, err = compute_T_if_ready(unity_anchors, rs_now, pair_map)
 			if T is not None:
