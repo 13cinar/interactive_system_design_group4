@@ -84,16 +84,28 @@ public class TCP : MonoBehaviour
                 data = null;
                 stream = client.GetStream();
 
+                
                 // Receive message from client    
                 int i;
+                string bufferedData = "";
                 while ((i = stream.Read(buffer, 0, buffer.Length)) != 0)
                 {
                     data = Encoding.UTF8.GetString(buffer, 0, i);
-                    Message message = Decode(data);
-                    Debug.Log(message.ToString());
-                    lock(Lock)
+                    //Debug.LogWarning("data is:" + data);
+
+                    //partially read and store new data
+                    bufferedData += data;
+                    // 1 or more complete messages read, splitting
+                    while (bufferedData.Contains("\n"))
                     {
-                        MessageQue.Add(message);
+                        // 1st find first ocurrence of our msg separator, 
+                        int tempidx = bufferedData.IndexOf("\n");
+                        string tempToSend = bufferedData.Substring(0, tempidx);
+
+                        // Decode and add message to our valid list of messages
+                        handleSingleMessage(tempToSend);
+                        // cut string and continue
+                        bufferedData = bufferedData.Substring(tempidx +1);
                     }
                 }
                 client.Close();
@@ -116,12 +128,20 @@ public class TCP : MonoBehaviour
         server.Stop();
         thread.Abort();
     }
-
+    private void handleSingleMessage(string input) {
+        Message message = Decode(input);
+        if (message != null)
+            // Add received message to que
+            lock (Lock)
+            {
+                MessageQue.Add(message);
+            }
+    }
     public void SendMessageToClient(Message message)
     {
         byte[] msg = Encoding.UTF8.GetBytes(Encode(message));
         stream.Write(msg, 0, msg.Length);
-        Debug.Log("Sent: " + message);
+        //Debug.Log("Sent: " + message);
     }
 
     // Encode message from struct to Json String
@@ -133,8 +153,18 @@ public class TCP : MonoBehaviour
     // Decode messaage from Json String to struct
     public Message Decode(string json_string)
     {
-        Message msg = JsonUtility.FromJson<Message>(json_string);
-        return msg;
+        Message msg;
+        try
+        {
+            msg = JsonUtility.FromJson<Message>(json_string);
+            return msg;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Err: " + ex.Message);
+            Debug.LogError("Error formatting json: " + json_string);
+            return null;
+        }
     }
 
     public void Move(Message message)

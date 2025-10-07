@@ -85,7 +85,7 @@ def receive(sock):
 	print("Received: ", msg)
 
 def send(sock, msg):
-	data = json.dumps(msg)
+	data = json.dumps(msg) + '\n'
 	sock.sendall(data.encode('utf-8'))
 	print("Sent: ", msg)
 
