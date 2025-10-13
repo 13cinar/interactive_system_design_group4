@@ -11,6 +11,8 @@ Unity project:
 	- Run Client
 	- **Optional:** _Set Boundaries_
 
+# Possible improvements
+- `Hand Grab poses` in the HandGrabScripts of the cart
 
 # Notes:
 ❗Ensure **BOUNDARIES ARE CONFIGURED** in Oculus:
