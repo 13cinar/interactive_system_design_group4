@@ -2,16 +2,6 @@
 Current Unity project:
 `lab2-final`
 
-TODO:
-- (TEST)Transform 3d Coordinates 
-- Track Motion of sensors
-
----
-DONE:
-- See Anchors in Unity
-- Connect Client & server
-- Make OUR JSON with the data we need from & to unity
-
 # Running
 1. Run in one terminal:
 ```

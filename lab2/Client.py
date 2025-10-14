@@ -8,7 +8,8 @@ import numpy as np
 import time, os
 #HOST = "192.168.0.126"  # The server's(Oculus)  hostname or IP address
 #HOST = "172.20.10.3"  # Eren's hotspot
-HOST = "10.90.175.12"  # Salv's hotspot
+#HOST = "10.90.175.12"  # Salv's hotspot
+HOST = "10.141.181.250"  # Salv's hotspot
 PORT = 54750;            # The port used by the server
 unity_anchors = {}  # {anchor_id: np.array([x,y,z])}
 # {anchor_id: aruco_id}  # temporary manual mapping for calibration
@@ -70,6 +71,48 @@ def rms_error(T, R_pts, U_pts):
     err   = np.linalg.norm(U_pts - U_pred, axis=1)
     return np.sqrt(np.mean(err**2)), U_pred
 
+def solve_rigid(src_pts, dst_pts, allow_scale=True):
+    """
+    src_pts: Nx3 (RealSense coords)
+    dst_pts: Nx3 (Unity coords)
+    returns (R, t, s) s.t.  x_u ≈ s * R * x_rs + t
+    """
+    P = np.asarray(src_pts, float); Q = np.asarray(dst_pts, float)
+    if P.shape != Q.shape or P.shape[0] < 3:  # needs >=3
+        return None
+    cP, cQ = P.mean(axis=0), Q.mean(axis=0)
+    P0, Q0 = P - cP, Q - cQ
+    H = P0.T @ Q0
+    U, S, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+    # reflection fix
+    if np.linalg.det(R) < 0:
+        Vt[2, :] *= -1
+        R = Vt.T @ U.T
+    if allow_scale:
+        den = (P0**2).sum()
+        s = float(S.sum() / den) if den > 1e-9 else 1.0
+    else:
+        s = 1.0
+    t = cQ - s * (R @ cP)
+    return R, t, s
+
+def apply_rigid(R, t, s, xyz):
+    v = np.asarray(xyz, float)
+    out = s * (R @ v) + t
+    return float(out[0]), float(out[1]), float(out[2])
+
+def save_rigid_result(src_pts, dst_pts, filename="T_CalibrationMatrix.json"):
+    R, t, s = solve_rigid(src_pts, dst_pts)
+    result = {
+        "R": R.tolist(),
+        "t": t.tolist(),
+        "s": s
+    }
+    with open(filename, "w") as f:
+        json.dump(result, f, indent=4)
+    print(f"Saved rigid transform to {filename}")
+
 def compute_T_if_ready(unity_anchors, rs_now, pair_map):
     R_list, U_list = [], []
     for a_id, r_id in pair_map.items():
@@ -81,7 +124,9 @@ def compute_T_if_ready(unity_anchors, rs_now, pair_map):
         U = np.vstack(U_list)
         T = build_affine_lstsq(R, U)
         err, _ = rms_error(T, R, U)
-        print(f"[Calib] Fitted T. RMS error = {err:.003f} m")
+        #print(f"[Calib] Fitted T. RMS error = {err:.003f} m")
+        #np.save("T_CalibrationMatrix.npy",T)
+        save_rigid_result(R_list,U_list)
         return T, err
     return None, None
 
@@ -98,34 +143,10 @@ def transform_rs_dict_and_send(sock, T, rs_now):
         }
         send(sock, out)
         
-def _self_test_calibration():
-    import numpy as np
-
-    # ---------- Test A: Identity (Unity == RealSense) ----------
-    R = np.array([[1.0, 2.0, 3.0],
-                  [4.0, 5.0, 6.0],
-                  [7.0, 8.0, 9.0]], dtype=float)
-    U = R.copy()  # identical -> T should be ~identity, RMS ~ 0
-    T_id = build_affine_lstsq(R, U)
-    rms_id, U_pred_id = rms_error(T_id, R, U)
-    print("\n[Test A] Identity")
-    print("RMS:", rms_id)
-    print("T:\n", T_id)
-
-    # ---------- Test B: Pure translation ----------
-    t = np.array([+0.50, -0.20, +0.10])
-    U2 = R + t  # Unity = RealSense + translation
-    T_tr = build_affine_lstsq(R, U2)
-    rms_tr, U_pred_tr = rms_error(T_tr, R, U2)
-    print("\n[Test B] Translation (+0.50, -0.20, +0.10)")
-    print("RMS:", rms_tr)
-    print("T:\n", T_tr)
-
-    # ---------- Optional: Rigid + scale sanity (not required) ----------
-    # You could also test a small scale or rotation if you want.
 
 ###
 # Connection Loop
+time.sleep(30) # to allow positioning
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 	sock.connect((HOST, PORT))
 	sock.settimeout(0.05)   # avoid blocking forever on recv; tweak if needed
