@@ -52,7 +52,15 @@ class MediaPipe:
     def point_to_3D(self, landmark, image, depth_frame):
       "Convert Pixel coordinates to RealSense 3D coordinates"
       depth_intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
-      image_height, image_width, _ = image.shape
+      try:
+        image_height, image_width, _ = image.shape
+      except Exception as e:
+        try:
+          image_height, image_width = image.shape
+        except Exception as e:
+          print(".",end="")
+          return None
+      #image_height, image_width, _ = image.shape
       x = int(landmark.x * image_width)
       x = min(image_width-1, max(x, 0))
       y = int(landmark.y * image_height)
@@ -60,7 +68,7 @@ class MediaPipe:
       depth = depth_frame.get_distance(x, y)
       return rs.rs2_deproject_pixel_to_point(depth_intrinsics, [x, y], depth) if depth > 0 else None
     
-    def skeleton(self, image, results, depth_frame):
+    def skeleton(self, R, t, s, image, results, depth_frame):
       "Return 3D coordinates of left hand, right hand and nose"
       if results.pose_landmarks is None:
         return None
@@ -69,19 +77,45 @@ class MediaPipe:
       if head3D is None:
         return None
       Head_x, Head_y, Head_z = head3D
+      print("[skeleton]head3D all normal")
+      #Head_x, Head_y, Head_z = self.transform_rs_to_Unity(T, head3D)
+      Head_x, Head_y, Head_z = self.apply_rigid(R, t, s, head3D)
+      
       rWrist3D =  self.point_to_3D(results.pose_landmarks.landmark[self.mp_holistic.PoseLandmark.RIGHT_WRIST],
                                                 image, depth_frame)
       if rWrist3D is None:
         return None
       RHand_x, RHand_y, RHand_z = rWrist3D
+      #RHand_x, RHand_y, RHand_z = self.transform_rs_to_Unity(T, rWrist3D)
+      RHand_x, RHand_y, RHand_z = self.apply_rigid(R, t, s, rWrist3D)
 
       lWrist3D = self.point_to_3D(results.pose_landmarks.landmark[self.mp_holistic.PoseLandmark.LEFT_WRIST],
                                                 image, depth_frame)
       if lWrist3D is None:
         return None
       LHand_x, LHand_y, LHand_z = lWrist3D
+      #LHand_x, LHand_y, LHand_z = self.transform_rs_to_Unity(T, lWrist3D)
+      LHand_x, LHand_y, LHand_z = self.apply_rigid(R, t, s, lWrist3D)
 
-      msg = {'LHand_x': -1*LHand_x, 'LHand_y': -1*LHand_y+1.5, 'LHand_z': -1*LHand_z,
-             'RHand_x': -1*RHand_x, 'RHand_y': -1*RHand_y+1.5, 'RHand_z': -1*RHand_z,
-             'Head_x': -1*Head_x, 'Head_y': -1*Head_y+1.5, 'Head_z': -1*Head_z,}
+      #msg = {'LHand_x': -1*LHand_x, 'LHand_y': -1*LHand_y+1.5, 'LHand_z': -1*LHand_z,
+      #       'RHand_x': -1*RHand_x, 'RHand_y': -1*RHand_y+1.5, 'RHand_z': -1*RHand_z,
+      #       'Head_x': -1*Head_x, 'Head_y': -1*Head_y+1.5, 'Head_z': -1*Head_z,}
+      msg = {'LHand_x': LHand_x, 'LHand_y': LHand_y, 'LHand_z': LHand_z,
+             'RHand_x': RHand_x, 'RHand_y': RHand_y, 'RHand_z': RHand_z,
+             'Head_x': Head_x, 'Head_y': Head_y, 'Head_z': Head_z,}
       return msg
+    
+    def transform_rs_to_Unity(self, T, rs_now):
+        """rs_now: array of 3 coordinates"""
+        print("@@@Transforming ")
+        #return rs_now[0], rs_now[1], rs_now[2]
+        R_h  = np.array([rs_now[0], rs_now[1], rs_now[2], 1.0], dtype=float)
+        Uxyz = (T @ R_h)[:3]
+        return float(Uxyz[0]), float(Uxyz[1]),float(Uxyz[2])
+      
+    def apply_rigid(self, R, t, s, xyz):
+        #return xyz[0], xyz[1], xyz[2]
+        v = np.asarray(xyz, float)
+        out = s * (R @ v) + t
+        return float(out[0]), float(out[1]), float(out[2])
+      

@@ -3,15 +3,18 @@ import json
 import cv2
 import numpy as np
 import pyrealsense2 as rs
+import time
 from MediaPipe import MediaPipe
 
 '''The server's hostname or IP address'''
-#HOST = "172.20.10.4" 
-HOST = "10.47.236.133"
+#HOST = "172.20.10.3" 
+#HOST = "192.168.0.140"
+HOST = "10.141.181.250"  # Salv's hotspot
 '''The port used by the server'''
 PORT = 50456
 
 def main():
+    time.sleep(30) #giving time to position
     mp = MediaPipe()
 
     # Configure depth and color streams
@@ -32,6 +35,16 @@ def main():
     if not found_rgb:
         print("[main] The demo requires Depth camera with Color sensor")
         exit(0)
+    try:
+        #T = np.load('T_CalibrationMatrix.npy')
+        with open("T_CalibrationMatrix.json", "r") as f:
+            data = json.load(f)
+        R = np.array(data["R"])
+        t = np.array(data["t"])
+        s = data["s"]
+    except Exception as e:
+        print("First run the lab2's calibration matrix and make sure the T_matrix.npy file is in the same folder")
+        return
 
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
@@ -61,9 +74,10 @@ def main():
                 color_image = np.asanyarray(color_frame.get_data())
                 detection_results = mp.detect(color_image)
                 color_image = mp.draw_landmarks_on_image(color_image, detection_results)
-                skeleton_data = mp.skeleton(color_image, detection_results, depth_frame)
+                skeleton_data = mp.skeleton(R, t, s, color_image, detection_results, depth_frame)
+                print("[DEBUG] Skeleton: ", skeleton_data)
                 if skeleton_data is not None:
-                     send(sock, skeleton_data)
+                    send(sock, skeleton_data)
 
                 try:
                     # Receive Message from Client
@@ -88,6 +102,6 @@ def send(sock, msg):
 	data = json.dumps(msg) + '\n'
 	sock.sendall(data.encode('utf-8'))
 	print("Sent: ", msg)
-
+ 
 if __name__ == '__main__':
     main()
