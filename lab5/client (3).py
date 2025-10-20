@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import matplotlib.pyplot as plt
 import mplcursors
 import textwrap
+import math
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 #initialiying the client
@@ -119,7 +120,7 @@ def visualize_graph(G: nx.DiGraph, layout: str = "spring"):
         G, pos,
         node_color="#00E1FF",
         node_size=6000,
-        alpha=0.95,
+        alpha=0.35,
         linewidths=1.5,
         edgecolors="gray"
     )
@@ -164,19 +165,6 @@ def visualize_graph(G: nx.DiGraph, layout: str = "spring"):
         verticalalignment='center'
     )
 
-    # Add hover interactivity for extra clarity
-    cursor = mplcursors.cursor(hover=True)
-    @cursor.connect("add")
-    def on_hover(sel):
-        if isinstance(sel.artist, plt.Line2D):
-            for (u, v, d) in G.edges(data=True):
-                edge_desc = d.get('description', '')
-                if edge_desc:
-                    wrapped = "\n".join(textwrap.wrap(edge_desc, width=50))
-                    sel.annotation.set_text(f"{u} → {v}\n{wrapped}")
-                    sel.annotation.get_bbox_patch().set(fc="white", alpha=0.85)
-                    break
-
     # Add a more prominent and centered title
     plt.title(
         G.graph.get("name", "Puzzle Graph"),
@@ -190,87 +178,6 @@ def visualize_graph(G: nx.DiGraph, layout: str = "spring"):
     plt.axis('off')
     plt.tight_layout(pad=2)
     plt.show()
-
-""" def visualize_graph(G: nx.DiGraph, layout: str = "spring"):
-    # Choose layout
-    if layout == "circular":
-        pos = nx.circular_layout(G)
-    elif layout == "shell":
-        pos = nx.shell_layout(G)
-    else:
-        pos = nx.spring_layout(G, seed=42)
-
-    # Extract edge labels
-    edge_labels = nx.get_edge_attributes(G, 'description')
-
-    plt.figure(figsize=(8, 6))
-    
-    # Draw nodes
-    nx.draw_networkx_nodes(
-        G, pos,
-        node_color="#A7D8DE",
-        node_size=2500,
-        alpha=0.9,
-        linewidths=1.5,
-        edgecolors="gray"
-    )
-
-    # Draw labels (nodes)
-    nx.draw_networkx_labels(
-        G, pos,
-        font_size=10,
-        font_weight='bold',
-        verticalalignment='center',
-        horizontalalignment='center'
-    )
-
-    # Draw directed edges (with arrows)
-    nx.draw_networkx_edges(
-        G, pos,
-        arrowstyle='-|>',
-        arrowsize=15,
-        edge_color="gray",
-        width=1.5,
-        connectionstyle="arc3,rad=0.1"
-    )
-
-    # Option 1: Edge descriptions as tooltips (cleaner)
-    cursor = mplcursors.cursor(hover=True)
-    @cursor.connect("add")
-    def on_hover(sel):
-        if isinstance(sel.artist, plt.Line2D):
-            # find which edge this line corresponds to
-            for (u, v, d) in G.edges(data=True):
-                edge_desc = d.get('description', '')
-                # display only if this matches
-                if edge_desc:
-                    sel.annotation.set_text(f"{u} → {v}\n{edge_desc}")
-                    sel.annotation.get_bbox_patch().set(fc="white", alpha=0.8)
-                    break
-
-    # Option 2: Alternatively, draw small static edge labels (uncomment to use)
-    nx.draw_networkx_edge_labels(
-        G, pos,
-        edge_labels=edge_labels,
-        font_color='darkred',
-        font_size=7,
-        rotate=False
-    )
-
-    plt.title(G.graph.get("name", "Puzzle Graph"), fontsize=14, fontweight='bold', pad=15)
-    plt.axis('off')
-    plt.tight_layout()
-    plt.show() """
-
-""" def visualize_graph(G: nx.Graph):
-
-    pos = nx.spring_layout(G)
-    edge_labels = nx.get_edge_attributes(G, 'description')
-
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=2000, font_size=10, font_weight='bold', arrows=True)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red', font_size=6)
-
-    plt.show() """
 
 #main pipeline
 if __name__ == "__main__":
@@ -303,4 +210,3 @@ if __name__ == "__main__":
     for g in graphs2:
         print(g, "\n")
         visualize_graph(g)
-    
