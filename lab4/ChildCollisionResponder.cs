@@ -3,42 +3,58 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class ChildCollisionResponder : MonoBehaviour
 {
-    private DisappearManager manager;
-    private bool hasDisappeared = false;
+    [Header("Who can collect me?")]
+    public LayerMask collectFromLayers;     // set to "Cart" in Inspector
 
-    void Awake()
+    [Header("What happens when collected?")]
+    public bool destroyOnCollect = false;   // false -> SetActive(false)
+    public float respawnAfter = -1f;        // <0 = never respawn
+
+    bool collected;
+    float respawnAt;
+
+    void Reset()
     {
-        manager = GetComponentInParent<DisappearManager>();
-        if (manager == null)
+        // Make sure apples are triggers and default to Cart as collector
+        var col = GetComponent<Collider>();
+        col.isTrigger = true;
+        collectFromLayers = LayerMask.GetMask("Cart");
+    }
+
+    void OnTriggerEnter(Collider other)  => TryCollect(other.gameObject);
+    void OnCollisionEnter(Collision c)   => TryCollect(c.gameObject);
+
+    void Update()
+    {
+        if (!collected || respawnAfter < 0f) return;
+        if (Time.time >= respawnAt)
         {
-            Debug.LogError("[ChildCollisionResponder] No DisappearManager found in parent hierarchy.");
+            gameObject.SetActive(true);
+            collected = false;
         }
     }
 
-    // For trigger-based setups
-    void OnTriggerEnter(Collider other)
+    void TryCollect(GameObject other)
     {
-        TryDisappear(other.gameObject);
-    }
+        if (collected) return;
 
-    // For non-trigger physics collisions
-    void OnCollisionEnter(Collision collision)
-    {
-        TryDisappear(collision.gameObject);
-    }
+        // Layer filter
+        if ((collectFromLayers.value & (1 << other.layer)) == 0) return;
 
-    private void TryDisappear(GameObject other)
-    {
-        if (manager == null || hasDisappeared) return;
-        if (!manager.IsInCollisionMask(other)) return;
+        collected = true;
 
-        hasDisappeared = true;
-        manager.ChildHit(gameObject);
-    }
+        if (destroyOnCollect)
+        {
+            Destroy(gameObject);
+        }
+        else
+        {
+            gameObject.SetActive(false);
+            if (respawnAfter >= 0f)
+                respawnAt = Time.time + respawnAfter;
+        }
 
-    // Called by manager when reactivating this child
-    public void ResetDisappearState()
-    {
-        hasDisappeared = false;
+        // TODO (optional): send score/event here
+        // Example: FindObjectOfType<GameManager>()?.OnAppleCollected();
     }
 }

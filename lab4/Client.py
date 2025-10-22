@@ -10,12 +10,17 @@ HOST = "127.0.0.1"   # Quest's Wi-Fi IP
 PORT = 13456             # Same port as Unity server
 # ----------------------------------------
 
-#NEW
 CART_MARKER_ID = 5
+REFILL_ID = 2
+THRESH=5
+_visible_streak, _hidden_streak = 0, 0
 
 def send(sock, msg):
     data = json.dumps(msg) + "\n"   # NDJSON framing
     sock.sendall(data.encode("utf-8"))
+    
+def send_refill(sock, need: bool):
+    send(sock, {"type":"refill_signal", "value": "NEED_REFILL" if need else "REFILL_DONE"})
 
 # ------------ receive anchors from Unity (background) ------------
 unity_anchors = {}   # id -> (x, y, z) in Unity space
@@ -48,12 +53,12 @@ def recv_unity(sock):
             
             
             # {type: "anchors", anchors: [ {id: 0, position: {x: 0.0, y: 0.0, z: 0.0}}, ... ] }
-            print("Received from Unity:", msg)
+            # print("Received from Unity:", msg)
             if msg.get("type") == "anchors":
                 for anchor in msg.get("anchors", []):
                     anchor_id = int(anchor["id"])
                     unity_anchors[anchor_id] = (float(anchor["X"]), float(anchor["Y"]), float(anchor["Z"]))
-                print("Unity anchors:", unity_anchors)
+                # print("Unity anchors:", unity_anchors)
 
 # -----------------------------------------------------------------
 
@@ -191,40 +196,53 @@ try:
                     transformed_X, transformed_Y, transformed_Z = apply_rigid(R, t, s, (skeleton_data[landmark_to_id_map[marker_id] + "_x"],
                                                     skeleton_data[landmark_to_id_map[marker_id] + "_y"],
                                                     skeleton_data[landmark_to_id_map[marker_id] + "_z"]))
-                    print(transformed_X, transformed_Y, transformed_Z)
+                    # print(transformed_X, transformed_Y, transformed_Z)
                     transformed_positions.append({"id": marker_id,
                                         "x": transformed_X, "y": transformed_Y, "z": transformed_Z})
-                    print(transformed_positions)
-                    
-        # -------- NEW: detect the cart marker (ArUco id=5) and send it --------
+                    # print(transformed_positions)
+         # -------- NEW: detect the cart marker (ArUco id=5) and send it --------
         # Only after RTS is solved (we need the calibration to convert camera->Unity)
         if RTS is not None:
             corners, ids, _ = arucoDetector.detectMarkers(color_image)
+            cv2.aruco.drawDetectedMarkers(color_image, corners, ids)
+            saw_refill= False
             if ids is not None and len(ids) > 0:
                 ids = ids.flatten()
                 for c, mid in zip(corners, ids):
-                    if int(mid) != CART_MARKER_ID:
-                        continue
-                    pts = c[0]  # (4,2)
-                    cx = int(np.mean(pts[:, 0])); cy = int(np.mean(pts[:, 1]))
-                    depth = depth_frame.get_distance(cx, cy)  # meters
-                    if depth <= 0:
-                        continue
-                    X, Y, Z = rs.rs2_deproject_pixel_to_point(depth_intrinsics, [cx, cy], depth)
-                    R, t, s = RTS
-                    tx, ty, tz = apply_rigid(R, t, s, (X, Y, Z))
-                    transformed_positions.append({
-                        "id": CART_MARKER_ID,
-                        "x": tx, "y": ty, "z": tz
-                    })
-                    # Only need one cart id; break once found
-                    break
+                    if int(mid) == CART_MARKER_ID:
+                        pts = c[0]  # (4,2)
+                        cx = int(np.mean(pts[:, 0])); cy = int(np.mean(pts[:, 1]))
+                        depth = depth_frame.get_distance(cx, cy)  # meters
+                        if depth > 0:
+                            X, Y, Z = rs.rs2_deproject_pixel_to_point(depth_intrinsics, [cx, cy], depth)
+                            R, t, s = RTS
+                            tx, ty, tz = apply_rigid(R, t, s, (X, Y, Z))
+                            transformed_positions.append({
+                                "id": CART_MARKER_ID,
+                                "x": tx, "y": ty, "z": tz
+                        })
+                    elif int(mid)== REFILL_ID:
+                        saw_refill = True
         # ---- send to Unity ----
             if transformed_positions:
                 send(sock, {"type": "aruco_unity",
                             "timestamp": time.time(),
                             "markers": transformed_positions})
                 transformed_positions = []
+                
+            if saw_refill:
+                _visible_streak += 1
+                _hidden_streak = 0
+                if _visible_streak == THRESH:
+                    print("[REFILL] NEED_REFILL")
+                    send(sock, {"type": "refill_signal", "value": "NEED_REFILL"})
+            else:
+                _hidden_streak += 1
+                _visible_streak = 0
+                if _hidden_streak == THRESH:
+                    print("[REFILL] REFILL_DONE")
+                    send(sock, {"type": "refill_signal", "value": "REFILL_DONE"})
+                
             time.sleep(0.05)  # slight delay to avoid flooding
 
         # ---- visualize (optional) ----

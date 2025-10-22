@@ -35,6 +35,9 @@ public class TCP : MonoBehaviour
     private struct MarkerEvent { public int id; public Vector3 pos; }
     private readonly Queue<MarkerEvent> eventQueue = new Queue<MarkerEvent>();
 
+    public event System.Action<bool> OnRefillSignal; // true = NEED_REFILL, false = REFILL_DONE
+    private readonly Queue<bool> refillQueue = new Queue<bool>();
+
 
 
     // Demo message (kept for backward compatibility)
@@ -75,6 +78,7 @@ public class TCP : MonoBehaviour
         public double timestamp;
         public List<ArucoMarker> anchors; // "anchors"　（ＵＮＩＴＹ　ｔｏ　ｃｌｉｅｎｔ）  OR　"markers" (ｃｌｉｅｎｔ　ｔｏ　ＵＮＩＴＹ）
     }
+    [Serializable] private class RefillMsg { public string type; public string value; }
 
 
     // {
@@ -124,6 +128,9 @@ public class TCP : MonoBehaviour
             while (poseQueue.Count > 0)
             {
                 var u = poseQueue.Dequeue();
+                //if returnState == true {
+                //    
+                //}
                 UpdateModelPosition(u);
                 // if (SpatialAnchorRegistry.anchorsById.TryGetValue(u.id, out var t) && t != null)
                 // {
@@ -143,6 +150,12 @@ public class TCP : MonoBehaviour
                 var e = eventQueue.Dequeue();
                 OnMarker?.Invoke(e.id, e.pos);   // cart follower listens for id=5
             }
+            while (refillQueue.Count > 0)
+            {
+                bool needRefill = refillQueue.Dequeue();
+                OnRefillSignal?.Invoke(needRefill);
+            }
+
         }
     }
      // receive message
@@ -211,14 +224,22 @@ public class TCP : MonoBehaviour
                                                     id = m.id,
                                                     pos = new Vector3(m.x, m.y, m.z)
                                                 });
-                                                    eventQueue.Enqueue(new MarkerEvent { id = m.id, pos = new Vector3(m.x, m.y, m.z) });
+                                                eventQueue.Enqueue(new MarkerEvent { id = m.id, pos = new Vector3(m.x, m.y, m.z) });
                                             }
                                         }
                                     }
                                     continue;
                                 }
-
-                                if (typeProbe.type == "aruco_frame")
+                                else if (typeProbe.type == "refill_signal")
+                                {
+                                    // Minimal parse: just read "value"
+                                    var root = JsonUtility.FromJson<RefillMsg>(one);
+                                    bool need = string.Equals(root.value, "NEED_REFILL", StringComparison.OrdinalIgnoreCase);
+                                    Debug.Log(root);
+                                    lock (Lock) refillQueue.Enqueue(need);
+                                    continue;
+                                }
+                                else if (typeProbe.type == "aruco_frame")
                                 {
                                     continue;
                                 }
@@ -324,7 +345,8 @@ public class TCP : MonoBehaviour
                 print("Right Hand position updated to: " + uMarker.pos);
                 break;
             default:
-                return;
+                Debug.LogWarning($"Unknown marker id {uMarker.id} for model update.");
+                break;
         }
     }
 
